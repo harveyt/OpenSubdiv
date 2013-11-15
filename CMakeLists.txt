@@ -564,8 +564,6 @@ if (NOT NO_REGRESSION AND NOT ANDROID AND NOT IOS) # XXXdyu
 endif()
 
 if (NOT NO_EXAMPLES)
-    message(WARNING
-"Will build examples 1")
     add_subdirectory(examples)
 endif()
 
