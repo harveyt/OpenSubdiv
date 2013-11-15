@@ -70,10 +70,15 @@ if(DXSDK_FOUND)
    endif()
 endif()
 
+message(WARNING
+"Will build examples 2")
+
 # XXXX manuelk : turning off the maya plugin examples for now
 if(MAYA_FOUND AND (NOT APPLE))
-#    add_subdirectory(mayaViewer)
+    message(WARNING
+"Will build mayaViewer")
+    add_subdirectory(mayaViewer)
     if(PTEX_FOUND)
-#        add_subdirectory(mayaPtexViewer)
+        add_subdirectory(mayaPtexViewer)
     endif()
 endif()

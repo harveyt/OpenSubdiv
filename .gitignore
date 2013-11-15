@@ -10,3 +10,26 @@
 *.pyc
 osdshim_wrap.cpp
 shim.py
+
+# CMake stuff
+/CMakeCache.txt
+*.cmake
+
+# Emacs stuff
+*~
+
+# Windows build products
+/Dependencies/
+/Win32/
+/bin/
+/lib/
+
+*.dir/
+
+*.vcxproj
+*.vcxproj.filters
+CMakeFiles/
+/OpenSubdiv.opensdf
+/OpenSubdiv.sdf
+/OpenSubdiv.sln
+/OpenSubdiv.v11.suo

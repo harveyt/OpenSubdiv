@@ -48,6 +48,7 @@ if (WIN32)
             glew GLEW glew32s glew32
         PATHS
             ${GLEW_LOCATION}/lib
+            ${GLEW_LOCATION}/lib/Release/Win32
             $ENV{GLEW_LOCATION}/lib
             $ENV{PROGRAMFILES}/GLEW/lib
             ${PROJECT_SOURCE_DIR}/extern/glew/bin

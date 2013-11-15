@@ -203,7 +203,7 @@ elseif(MSVC)
 
     list(APPEND OSD_COMPILER_FLAGS
                     /W3     # Use warning level recommended for production purposes.
-                    /WX     # Treat all compiler warnings as errors.
+                    # /WX     # Treat all compiler warnings as errors.
 
                     # these warnings are being triggered from inside VC's header files
                     # warning C4350: behavior change: 'member1' called instead of 'member2'
@@ -564,6 +564,8 @@ if (NOT NO_REGRESSION AND NOT ANDROID AND NOT IOS) # XXXdyu
 endif()
 
 if (NOT NO_EXAMPLES)
+    message(WARNING
+"Will build examples 1")
     add_subdirectory(examples)
 endif()
 
