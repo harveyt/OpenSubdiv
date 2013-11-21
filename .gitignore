@@ -19,7 +19,6 @@ shim.py
 *~
 
 # Windows build products
-/Dependencies/
 /Win32/
 /bin/
 /lib/
