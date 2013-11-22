@@ -19,6 +19,8 @@ shim.py
 *~
 
 # Windows build products
+Debug/
+x64/
 /Win32/
 /bin/
 /lib/

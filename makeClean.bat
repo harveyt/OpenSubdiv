@@ -1,3 +1,3 @@
-# Assumes you have a working git binary installed
+rem Assumes you have a working git binary installed
 git clean -f -d -x
 
