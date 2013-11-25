@@ -67,6 +67,17 @@
 #include <osd/cpuComputeController.h>
 #include <osd/cpuVertexBuffer.h>
 
+#ifdef OPENSUBDIV_HAS_OPENCL
+    #include <osd/clVertexBuffer.h>
+    #include <osd/clComputeContext.h>
+    #include <osd/clComputeController.h>
+
+    #include "../common/clInit.h"
+
+	bool g_clInitialized = false;
+    cl_context g_clContext;
+    cl_command_queue g_clQueue;
+#endif
 
 // ====================================
 // Static Initialization
@@ -503,10 +514,24 @@ createOsdHbrFromPoly( MFnMesh const & inMeshFn,
     return hbrMesh;
 }
 
+inline const float * bindVertexBuffer(OpenSubdiv::OsdCpuVertexBuffer * vertexBuffer)
+{
+    return vertexBuffer->BindCpuBuffer();
+}
 
+#ifdef OPENSUBDIV_HAS_OPENCL
+inline const float * bindVertexBuffer(OpenSubdiv::OsdCLVertexBuffer * vertexBuffer)
+{
+    cl_mem mem = vertexBuffer->BindCLBuffer(g_clQueue);
+	// TODO: How to convert mem to vertexData?
+	return 0;
+}
+#endif
+
+template <typename VertexBuffer>
 MStatus convertOsdFarToMayaMeshData(
      FMesh const * farMesh,
-     OpenSubdiv::OsdCpuVertexBuffer * vertexBuffer,
+     VertexBuffer * vertexBuffer,
      int subdivisionLevel,
      MFnMesh const & inMeshFn,
      MObject newMeshDataObj ) {
@@ -541,7 +566,7 @@ MStatus convertOsdFarToMayaMeshData(
     // Number of floats in each vertex.  (positions, normals, etc)
     int numFloatsPerVertex = vertexBuffer->GetNumElements();
     assert(numFloatsPerVertex == 3); // assuming only xyz stored for each vertex
-    const float *vertexData = vertexBuffer->BindCpuBuffer();
+    const float *vertexData = bindVertexBuffer(vertexBuffer);
     float *ptrVertexData;
 
     for (unsigned int i=0; i < numVertices; i++) {
@@ -706,11 +731,17 @@ public:
 		, m_numVaryingElements(numVaryingElements)
 		, m_numVertices(numVertices)
 		, m_numFarVerts(numFarVerts)
+		, m_isInitialized(false)
 	{
 	}
 
 	virtual ~ComputeEngine()
 	{
+	}
+
+	bool IsInitialized() const
+	{
+		return m_isInitialized;
 	}
 
 	virtual void UpdateData(const float *src, int startVertex, int numVertices) = 0;
@@ -723,6 +754,7 @@ protected:
 	int m_numVaryingElements;
 	int m_numVertices;
 	int m_numFarVerts;
+	bool m_isInitialized;
 };
 
 class CpuComputeEngine : public ComputeEngine
@@ -735,6 +767,7 @@ public:
 		m_computeContext = OpenSubdiv::OsdCpuComputeController::ComputeContext::Create(farMesh);
 		m_vertexBuffer = OpenSubdiv::OsdCpuVertexBuffer::Create(numVertexElements, numFarVerts);
 		m_varyingBuffer = (numVaryingElements) ? OpenSubdiv::OsdCpuVertexBuffer::Create(numVaryingElements, numFarVerts) : NULL;
+		m_isInitialized = true;
 	}
 
 	virtual ~CpuComputeEngine()
@@ -767,6 +800,67 @@ private:
 	OpenSubdiv::OsdCpuVertexBuffer * m_vertexBuffer;
 	OpenSubdiv::OsdCpuVertexBuffer * m_varyingBuffer;
 };
+
+#ifdef OPENSUBDIV_HAS_OPENCL
+
+class CLComputeEngine : public ComputeEngine
+{
+public:
+	CLComputeEngine(FMesh const *farMesh, int numVertexElements, int numVaryingElements, int numVertices, int numFarVerts)
+		: ComputeEngine(farMesh, numVertexElements, numVaryingElements, numVertices, numFarVerts)
+	{
+		if (!g_clInitialized)
+		{
+			if (!initCL(&g_clContext, &g_clQueue))
+			{
+				m_isInitialized = false;
+				return;
+			}
+			g_clInitialized = true;
+		}
+
+		m_computeController = new OpenSubdiv::OsdCLComputeController(g_clContext, g_clQueue);
+		m_computeContext = OpenSubdiv::OsdCLComputeController::ComputeContext::Create(farMesh, g_clContext);
+		m_vertexBuffer = OpenSubdiv::OsdCLVertexBuffer::Create(numVertexElements, numFarVerts, g_clContext);
+		m_varyingBuffer = (numVaryingElements) ? OpenSubdiv::OsdCLVertexBuffer::Create(numVaryingElements, numFarVerts, g_clContext) : NULL;
+		m_isInitialized = true;
+	}
+
+	virtual ~CLComputeEngine()
+	{
+		if (m_isInitialized)
+		{
+			delete(m_vertexBuffer);
+			delete(m_varyingBuffer);
+			delete(m_computeContext);
+			delete(m_computeController);
+		}
+	}
+
+	virtual void UpdateData(const float *src, int startVertex, int numVertices)
+	{
+		m_vertexBuffer->UpdateData(src, startVertex, numVertices, g_clQueue);
+	}
+
+	virtual void Subdivide()
+	{
+		m_computeController->Refine(m_computeContext, m_farMesh->GetKernelBatches(), m_vertexBuffer, m_varyingBuffer);
+		m_computeController->Synchronize();
+	}
+
+	virtual MStatus ConvertToMayaMeshData(int subdivisionLevel, MFnMesh const & inMeshFn, MObject newMeshDataObj)
+	{
+		return convertOsdFarToMayaMeshData(m_farMesh, m_vertexBuffer, subdivisionLevel, inMeshFn, newMeshDataObj);
+	}
+
+private:
+	OpenSubdiv::OsdCLComputeController * m_computeController;
+	OpenSubdiv::OsdCLComputeController::ComputeContext * m_computeContext;
+	OpenSubdiv::OsdCLVertexBuffer * m_vertexBuffer;
+	OpenSubdiv::OsdCLVertexBuffer * m_varyingBuffer;
+};
+
+#endif
 
 // ====================================
 // Compute
@@ -1188,6 +1282,13 @@ MStatus uninitializePlugin( MObject obj)
 
     returnStatus = plugin.deregisterNode( OsdPolySmooth::id );
     MCHECKERR(returnStatus, "deregisterNode");
+
+#ifdef OPENSUBDIV_HAS_OPENCL
+	if (g_clInitialized)
+	{
+		uninitCL(g_clContext, g_clQueue);
+	}
+#endif
 
     return returnStatus;
 }

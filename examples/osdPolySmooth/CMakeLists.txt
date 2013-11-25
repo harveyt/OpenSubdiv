@@ -78,6 +78,13 @@ elseif(WIN32)
     )
 endif()
 
+if ( OPENCL_FOUND )
+    include_directories(${OPENCL_INCLUDE_DIRS})
+    list(APPEND PLATFORM_GPU_LIBRARIES
+        ${OPENCL_LIBRARIES}
+    )
+endif()
+
 add_definitions(
     ${PLATFORM_COMPILE_FLAGS}
 )
