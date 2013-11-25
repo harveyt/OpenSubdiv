@@ -697,6 +697,76 @@ createSmoothMesh_objectGroups(const MFnMeshData &inMeshDat,
     return MS::kSuccess;
 }
 
+class ComputeEngine
+{
+public:
+	ComputeEngine(FMesh const *farMesh, int numVertexElements, int numVaryingElements, int numVertices, int numFarVerts)
+		: m_farMesh(farMesh)
+		, m_numVertexElements(numVertexElements)
+		, m_numVaryingElements(numVaryingElements)
+		, m_numVertices(numVertices)
+		, m_numFarVerts(numFarVerts)
+	{
+	}
+
+	virtual ~ComputeEngine()
+	{
+	}
+
+	virtual void UpdateData(const float *src, int startVertex, int numVertices) = 0;
+	virtual void Subdivide() = 0;
+	virtual MStatus ConvertToMayaMeshData(int subdivisionLevel, MFnMesh const & inMeshFn, MObject newMeshDataObj) = 0;
+
+protected:
+	FMesh const * m_farMesh;
+	int m_numVertexElements;
+	int m_numVaryingElements;
+	int m_numVertices;
+	int m_numFarVerts;
+};
+
+class CpuComputeEngine : public ComputeEngine
+{
+public:
+	CpuComputeEngine(FMesh const *farMesh, int numVertexElements, int numVaryingElements, int numVertices, int numFarVerts)
+		: ComputeEngine(farMesh, numVertexElements, numVaryingElements, numVertices, numFarVerts)
+	{
+		m_computeController = new OpenSubdiv::OsdCpuComputeController();
+		m_computeContext = OpenSubdiv::OsdCpuComputeController::ComputeContext::Create(farMesh);
+		m_vertexBuffer = OpenSubdiv::OsdCpuVertexBuffer::Create(numVertexElements, numFarVerts);
+		m_varyingBuffer = (numVaryingElements) ? OpenSubdiv::OsdCpuVertexBuffer::Create(numVaryingElements, numFarVerts) : NULL;
+	}
+
+	virtual ~CpuComputeEngine()
+	{
+		delete(m_vertexBuffer);
+		delete(m_varyingBuffer);
+		delete(m_computeContext);
+		delete(m_computeController);
+	}
+
+	virtual void UpdateData(const float *src, int startVertex, int numVertices)
+	{
+		m_vertexBuffer->UpdateData(src, startVertex, numVertices);
+	}
+
+	virtual void Subdivide()
+	{
+		m_computeController->Refine(m_computeContext, m_farMesh->GetKernelBatches(), m_vertexBuffer, m_varyingBuffer);
+		m_computeController->Synchronize();
+	}
+
+	virtual MStatus ConvertToMayaMeshData(int subdivisionLevel, MFnMesh const & inMeshFn, MObject newMeshDataObj)
+	{
+		return convertOsdFarToMayaMeshData(m_farMesh, m_vertexBuffer, subdivisionLevel, inMeshFn, newMeshDataObj);
+	}
+
+private:
+	OpenSubdiv::OsdCpuComputeController * m_computeController;
+	OpenSubdiv::OsdCpuComputeController::ComputeContext * m_computeContext;
+	OpenSubdiv::OsdCpuVertexBuffer * m_vertexBuffer;
+	OpenSubdiv::OsdCpuVertexBuffer * m_varyingBuffer;
+};
 
 // ====================================
 // Compute
@@ -800,20 +870,12 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
 
                 int numFarVerts = farMesh->GetNumVertices();
 
-                static OpenSubdiv::OsdCpuComputeController computeController = OpenSubdiv::OsdCpuComputeController();
-
-                OpenSubdiv::OsdCpuComputeController::ComputeContext *computeContext =
-                    OpenSubdiv::OsdCpuComputeController::ComputeContext::Create(farMesh);
-
-                OpenSubdiv::OsdCpuVertexBuffer *vertexBuffer =
-                    OpenSubdiv::OsdCpuVertexBuffer::Create(numVertexElements, numFarVerts );
-
-                OpenSubdiv::OsdCpuVertexBuffer *varyingBuffer =
-                    (numVaryingElements) ? OpenSubdiv::OsdCpuVertexBuffer::Create(numVaryingElements, numFarVerts) : NULL;
+				ComputeEngine *computeEngine = new CpuComputeEngine(farMesh, numVertexElements, numVaryingElements,
+																	numVertices, numFarVerts);
 
                 // == UPDATE VERTICES (can be done after farMesh generated from topology) ==
                 float const * vertex3fArray = inMeshFn.getRawPoints(&returnStatus);
-                vertexBuffer->UpdateData(vertex3fArray, 0, numVertices );
+				computeEngine->UpdateData(vertex3fArray, 0, numVertices);
 
                 // Hbr dupes singular vertices during Mesh::Finish() - we need
                 // to duplicate their positions in the vertex buffer.
@@ -839,8 +901,8 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
                         inMeshFn.getPolygonVertices(f->GetID(), polyverts);
 
                         int vert = polyverts[vidx];
-
-                        vertexBuffer->UpdateData(&vertex3fArray[0]+vert*numVertexElements, i, 1);
+						
+                        computeEngine->UpdateData(&vertex3fArray[0]+vert*numVertexElements, i, 1);
                     }
                 }
 
@@ -850,8 +912,7 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
                 hbrMesh = NULL;
 
                 // == Subdivide OpenSubdiv mesh ==========================
-                computeController.Refine(computeContext, farMesh->GetKernelBatches(), vertexBuffer, varyingBuffer);
-                computeController.Synchronize();
+				computeEngine->Subdivide();
 
                 // == Convert subdivided OpenSubdiv mesh to MFnMesh Data outputMesh =============
 
@@ -861,7 +922,7 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
                 MCHECKERR(returnStatus, "ERROR creating outputData");
 
                 // Create out mesh
-                returnStatus = convertOsdFarToMayaMeshData(farMesh, vertexBuffer, subdivisionLevel, inMeshFn, newMeshDataObj);
+                returnStatus = computeEngine->ConvertToMayaMeshData(subdivisionLevel, inMeshFn, newMeshDataObj);
                 MCHECKERR(returnStatus, "ERROR convertOsdFarToMayaMesh");
 
                 // Propagate objectGroups from inMesh to outMesh (for per-facet shading, etc)
@@ -874,9 +935,7 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
 
                 // == Cleanup OSD ============================================
                 // REVISIT: Re-add these deletes
-                delete(vertexBuffer);
-                delete(varyingBuffer);
-                delete(computeContext);
+				delete(computeEngine);
                 delete(farMesh);
 
                 // note that the subd mesh was created (see the section below if !createdSubdMesh)
