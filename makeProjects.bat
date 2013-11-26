@@ -1,7 +1,7 @@
 rem Run Me to rebuild VS Projects
 echo CD=%CD%
-set CMAKE_PATH=%CD%\Dependencies\CMake 2.8\bin
-set GLEW_PATH=%CD%\Dependencies\glew-1.10.0
+set CMAKE_PATH=%CD%\..\Dependencies\CMake 2.8\bin
+set GLEW_PATH=%CD%\..\Dependencies\glew-1.10.0
 set OPENCL_PATH="c:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v5.5"
 set MAYA_PATH="c:\Program Files\Autodesk\Maya2014"
 set PATH=%PATH%;%CMAKE_PATH%
