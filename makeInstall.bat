@@ -11,9 +11,14 @@ devenv OpenSubdiv.sln /Project INSTALL /ProjectConfig "Release|x64" /Build "Rele
 set BUILD_PATH="c:\Program Files\OpenSubDiv\plugin"
 set PLUGIN_PATH=%TNT_ROOT%\Tools\MayaPlugins\2014-x64
 
+set oldcd=%CD%
+
 cd /d %PLUGIN_PATH%
 p4 edit plug-ins\osdPolySmooth.mll
 p4 edit scripts\osdPolySmooth.mel
 copy %BUILD_PATH%\osdPolySmooth.mll %PLUGIN_PATH%\plug-ins\osdPolySmooth.mll
 copy %BUILD_PATH%\osdPolySmooth.mel %PLUGIN_PATH%\scripts\osdPolySmooth.mel
+
+cd /d %oldcd%
+
 
