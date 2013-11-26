@@ -29,6 +29,7 @@ x64/
 
 *.vcxproj
 *.vcxproj.filters
+*.vcxproj.user
 CMakeFiles/
 /OpenSubdiv.opensdf
 /OpenSubdiv.sdf

@@ -514,24 +514,10 @@ createOsdHbrFromPoly( MFnMesh const & inMeshFn,
     return hbrMesh;
 }
 
-inline const float * bindVertexBuffer(OpenSubdiv::OsdCpuVertexBuffer * vertexBuffer)
-{
-    return vertexBuffer->BindCpuBuffer();
-}
-
-#ifdef OPENSUBDIV_HAS_OPENCL
-inline const float * bindVertexBuffer(OpenSubdiv::OsdCLVertexBuffer * vertexBuffer)
-{
-    cl_mem mem = vertexBuffer->BindCLBuffer(g_clQueue);
-	// TODO: How to convert mem to vertexData?
-	return 0;
-}
-#endif
-
-template <typename VertexBuffer>
 MStatus convertOsdFarToMayaMeshData(
      FMesh const * farMesh,
-     VertexBuffer * vertexBuffer,
+	 const float * vertexData,
+	 int numFloatsPerVertex,
      int subdivisionLevel,
      MFnMesh const & inMeshFn,
      MObject newMeshDataObj ) {
@@ -564,9 +550,7 @@ MStatus convertOsdFarToMayaMeshData(
 
     // -- Points
     // Number of floats in each vertex.  (positions, normals, etc)
-    int numFloatsPerVertex = vertexBuffer->GetNumElements();
     assert(numFloatsPerVertex == 3); // assuming only xyz stored for each vertex
-    const float *vertexData = bindVertexBuffer(vertexBuffer);
     float *ptrVertexData;
 
     for (unsigned int i=0; i < numVertices; i++) {
@@ -791,7 +775,9 @@ public:
 
 	virtual MStatus ConvertToMayaMeshData(int subdivisionLevel, MFnMesh const & inMeshFn, MObject newMeshDataObj)
 	{
-		return convertOsdFarToMayaMeshData(m_farMesh, m_vertexBuffer, subdivisionLevel, inMeshFn, newMeshDataObj);
+		const float *vertexData = m_vertexBuffer->BindCpuBuffer();
+		int numFloatsPerVertex = m_vertexBuffer->GetNumElements();
+		return convertOsdFarToMayaMeshData(m_farMesh, vertexData, numFloatsPerVertex, subdivisionLevel, inMeshFn, newMeshDataObj);
 	}
 
 private:
@@ -822,6 +808,14 @@ public:
 		m_computeController = new OpenSubdiv::OsdCLComputeController(g_clContext, g_clQueue);
 		m_computeContext = OpenSubdiv::OsdCLComputeController::ComputeContext::Create(farMesh, g_clContext);
 		m_vertexBuffer = OpenSubdiv::OsdCLVertexBuffer::Create(numVertexElements, numFarVerts, g_clContext);
+		if (m_vertexBuffer == NULL)
+		{
+			delete(m_computeContext);
+			delete(m_computeController);
+			m_isInitialized = false;
+			return;
+		}
+
 		m_varyingBuffer = (numVaryingElements) ? OpenSubdiv::OsdCLVertexBuffer::Create(numVaryingElements, numFarVerts, g_clContext) : NULL;
 		m_isInitialized = true;
 	}
@@ -850,7 +844,14 @@ public:
 
 	virtual MStatus ConvertToMayaMeshData(int subdivisionLevel, MFnMesh const & inMeshFn, MObject newMeshDataObj)
 	{
-		return convertOsdFarToMayaMeshData(m_farMesh, m_vertexBuffer, subdivisionLevel, inMeshFn, newMeshDataObj);
+		cl_mem mem = m_vertexBuffer->BindCLBuffer(g_clQueue);
+		int numFloatsPerVertex = m_vertexBuffer->GetNumElements();
+		int size = m_numVertices * numFloatsPerVertex * sizeof(float);
+		float * vertexData = new float[size];
+		clEnqueueReadBuffer(g_clQueue, mem, true, 0, size, vertexData, 0, NULL, NULL);
+		MStatus status = convertOsdFarToMayaMeshData(m_farMesh, vertexData, numFloatsPerVertex, subdivisionLevel, inMeshFn, newMeshDataObj);
+		delete[] vertexData;
+		return status;
 	}
 
 private:
@@ -964,8 +965,27 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
 
                 int numFarVerts = farMesh->GetNumVertices();
 
-				ComputeEngine *computeEngine = new CpuComputeEngine(farMesh, numVertexElements, numVaryingElements,
-																	numVertices, numFarVerts);
+				ComputeEngine *computeEngine = NULL;
+
+#ifdef OPENSUBDIV_HAS_OPENCL
+				if (computeEngine == NULL)
+				{
+					computeEngine = new CLComputeEngine(farMesh, numVertexElements, numVaryingElements,
+														numVertices, numFarVerts);
+					if (!computeEngine->IsInitialized())
+					{
+						MGlobal::displayError(MString("Cannot initialize OpenCL compute engine for OpenSubDiv, using CPU engine"));
+						delete computeEngine;
+						computeEngine = NULL;
+					}
+				}
+#endif
+
+				if (computeEngine == NULL)
+				{
+					computeEngine = new CpuComputeEngine(farMesh, numVertexElements, numVaryingElements,
+													 numVertices, numFarVerts);
+				}
 
                 // == UPDATE VERTICES (can be done after farMesh generated from topology) ==
                 float const * vertex3fArray = inMeshFn.getRawPoints(&returnStatus);
