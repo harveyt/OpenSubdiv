@@ -75,7 +75,6 @@
 	#define OPENSUBDIV_CLINIT_USE_MAYA_API
     #include "../common/clInit.h"
 
-	bool g_clInitialized = false;
     cl_context g_clContext;
     cl_command_queue g_clQueue;
 #endif
@@ -716,7 +715,6 @@ public:
 		, m_numVaryingElements(numVaryingElements)
 		, m_numVertices(numVertices)
 		, m_numFarVerts(numFarVerts)
-		, m_isInitialized(false)
 	{
 	}
 
@@ -724,23 +722,50 @@ public:
 	{
 	}
 
-	bool IsInitialized() const
+	bool Initialize()
 	{
-		return m_isInitialized;
+		switch (ms_initState)
+		{
+		case InitState_Error:
+			return false;
+
+		default:
+		case InitState_FirstTime:
+		case InitState_Ok:
+			if (!DoInitialize(ms_initState == InitState_FirstTime))
+			{
+				ms_initState = InitState_Error;
+				return false;
+			}
+			ms_initState = InitState_Ok;
+			break;
+		}
+
+		return true;
 	}
 
+	virtual bool DoInitialize(bool firstTime) = 0;
 	virtual void UpdateData(const float *src, int startVertex, int numVertices) = 0;
 	virtual void Subdivide() = 0;
 	virtual MStatus ConvertToMayaMeshData(int subdivisionLevel, MFnMesh const & inMeshFn, MObject newMeshDataObj) = 0;
 
 protected:
+	enum InitState
+	{
+		InitState_FirstTime,
+		InitState_Ok,
+		InitState_Error,
+	};
+
+	static InitState ms_initState;
 	FMesh const * m_farMesh;
 	int m_numVertexElements;
 	int m_numVaryingElements;
 	int m_numVertices;
 	int m_numFarVerts;
-	bool m_isInitialized;
 };
+
+ComputeEngine::InitState ComputeEngine::ms_initState = InitState_FirstTime;
 
 class CpuComputeEngine : public ComputeEngine
 {
@@ -748,11 +773,6 @@ public:
 	CpuComputeEngine(FMesh const *farMesh, int numVertexElements, int numVaryingElements, int numVertices, int numFarVerts)
 		: ComputeEngine(farMesh, numVertexElements, numVaryingElements, numVertices, numFarVerts)
 	{
-		m_computeController = new OpenSubdiv::OsdCpuComputeController();
-		m_computeContext = OpenSubdiv::OsdCpuComputeController::ComputeContext::Create(farMesh);
-		m_vertexBuffer = OpenSubdiv::OsdCpuVertexBuffer::Create(numVertexElements, numFarVerts);
-		m_varyingBuffer = (numVaryingElements) ? OpenSubdiv::OsdCpuVertexBuffer::Create(numVaryingElements, numFarVerts) : NULL;
-		m_isInitialized = true;
 	}
 
 	virtual ~CpuComputeEngine()
@@ -761,6 +781,19 @@ public:
 		delete(m_varyingBuffer);
 		delete(m_computeContext);
 		delete(m_computeController);
+	}
+
+	virtual bool DoInitialize(bool firstTime)
+	{
+		m_computeController = new OpenSubdiv::OsdCpuComputeController();
+		m_computeContext = OpenSubdiv::OsdCpuComputeController::ComputeContext::Create(m_farMesh);
+		m_vertexBuffer = OpenSubdiv::OsdCpuVertexBuffer::Create(m_numVertexElements, m_numFarVerts);
+		m_varyingBuffer = (m_numVaryingElements) ? OpenSubdiv::OsdCpuVertexBuffer::Create(m_numVaryingElements, m_numFarVerts) : NULL;
+		if (firstTime)
+		{
+			MGlobal::displayInfo(MString("OpenSubDiv using CPU compute engine"));
+		}
+		return true;
 	}
 
 	virtual void UpdateData(const float *src, int startVertex, int numVertices)
@@ -796,42 +829,42 @@ public:
 	CLComputeEngine(FMesh const *farMesh, int numVertexElements, int numVaryingElements, int numVertices, int numFarVerts)
 		: ComputeEngine(farMesh, numVertexElements, numVaryingElements, numVertices, numFarVerts)
 	{
-		if (!g_clInitialized)
-		{
-			if (!initCL(&g_clContext, &g_clQueue))
-			{
-				MGlobal::displayError(MString("OpenSubDiv cannot initialize OpenCL sub-system"));
-				m_isInitialized = false;
-				return;
-			}
-			g_clInitialized = true;
-		}
-
-		m_computeController = new OpenSubdiv::OsdCLComputeController(g_clContext, g_clQueue);
-		m_computeContext = OpenSubdiv::OsdCLComputeController::ComputeContext::Create(farMesh, g_clContext);
-		m_vertexBuffer = OpenSubdiv::OsdCLVertexBuffer::Create(numVertexElements, numFarVerts, g_clContext);
-		if (m_vertexBuffer == NULL)
-		{
-			MGlobal::displayError(MString("OpenSubDiv cannot initialize OpenCL vertex buffer"));
-			delete(m_computeContext);
-			delete(m_computeController);
-			m_isInitialized = false;
-			return;
-		}
-
-		m_varyingBuffer = (numVaryingElements) ? OpenSubdiv::OsdCLVertexBuffer::Create(numVaryingElements, numFarVerts, g_clContext) : NULL;
-		m_isInitialized = true;
 	}
 
 	virtual ~CLComputeEngine()
 	{
-		if (m_isInitialized)
+		delete(m_vertexBuffer);
+		delete(m_varyingBuffer);
+		delete(m_computeContext);
+		delete(m_computeController);
+	}
+
+	virtual bool DoInitialize(bool firstTime)
+	{
+		if (firstTime)
 		{
-			delete(m_vertexBuffer);
-			delete(m_varyingBuffer);
-			delete(m_computeContext);
-			delete(m_computeController);
+			if (!initCL(&g_clContext, &g_clQueue))
+			{
+				MGlobal::displayError(MString("OpenSubDiv cannot initialize OpenCL sub-system"));
+				return false;
+			}
 		}
+
+		m_computeController = new OpenSubdiv::OsdCLComputeController(g_clContext, g_clQueue);
+		m_computeContext = OpenSubdiv::OsdCLComputeController::ComputeContext::Create(m_farMesh, g_clContext);
+		m_vertexBuffer = OpenSubdiv::OsdCLVertexBuffer::Create(m_numVertexElements, m_numFarVerts, g_clContext);
+		if (m_vertexBuffer == NULL)
+		{
+			MGlobal::displayError(MString("OpenSubDiv cannot initialize OpenCL vertex buffer"));
+			return false;
+		}
+
+		m_varyingBuffer = (m_numVaryingElements) ? OpenSubdiv::OsdCLVertexBuffer::Create(m_numVaryingElements, m_numFarVerts, g_clContext) : NULL;
+		if (firstTime)
+		{
+			MGlobal::displayInfo(MString("OpenSubDiv using OpenCL compute engine"));
+		}
+		return true;
 	}
 
 	virtual void UpdateData(const float *src, int startVertex, int numVertices)
@@ -873,16 +906,6 @@ private:
 };
 
 #endif
-
-enum ComputeEngineStyle
-{
-	ComputeEngine_NotSet,
-	ComputeEngine_CPU,
-#ifdef OPENSUBDIV_HAS_OPENCL
-	ComputeEngine_OpenCL,
-#endif
-};
-ComputeEngineStyle g_computeEngineStyle = ComputeEngine_NotSet;
 
 // ====================================
 // Compute
@@ -986,39 +1009,25 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
 
                 int numFarVerts = farMesh->GetNumVertices();
 
-				ComputeEngine *computeEngine;
-
-				switch (g_computeEngineStyle)
-				{
-				case ComputeEngine_NotSet:
-					goto try_ComputeEngine_OpenCL;
+				ComputeEngine *computeEngine = NULL;
 
 #ifdef OPENSUBDIV_HAS_OPENCL
-				try_ComputeEngine_OpenCL:
-				case ComputeEngine_OpenCL:
+				if (computeEngine == NULL)
+				{
 					computeEngine = new CLComputeEngine(farMesh, numVertexElements, numVaryingElements,
 														numVertices, numFarVerts);
-					if (!computeEngine->IsInitialized())
+					if (!computeEngine->Initialize())
 					{
 						delete computeEngine;
 						computeEngine = NULL;
-						goto try_ComputeEngine_CPU;
 					}
-
-					if (g_computeEngineStyle == ComputeEngine_NotSet)
-						MGlobal::displayInfo(MString("OpenSubDiv using OpenCL compute engine"));
-					g_computeEngineStyle = ComputeEngine_OpenCL;
-					break;
+				}
 #endif
 
-				try_ComputeEngine_CPU:
-				case ComputeEngine_CPU:
+				if (computeEngine == NULL)
+				{
 					computeEngine = new CpuComputeEngine(farMesh, numVertexElements, numVaryingElements,
-						numVertices, numFarVerts);
-					if (g_computeEngineStyle == ComputeEngine_NotSet)
-						MGlobal::displayInfo(MString("OpenSubDiv using CPU compute engine"));
-					g_computeEngineStyle = ComputeEngine_CPU;
-					break;
+														 numVertices, numFarVerts);
 				}
 
                 // == UPDATE VERTICES (can be done after farMesh generated from topology) ==
@@ -1338,7 +1347,7 @@ MStatus uninitializePlugin( MObject obj)
     MCHECKERR(returnStatus, "deregisterNode");
 
 #ifdef OPENSUBDIV_HAS_OPENCL
-	if (g_clInitialized)
+	if (g_clContext != NULL)
 	{
 		uninitCL(g_clContext, g_clQueue);
 	}
