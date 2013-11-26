@@ -38,6 +38,27 @@
 
 #include <cstdio>
 
+#ifdef OPENSUBDIV_CLINIT_USE_MAYA_API
+#include <maya/MGlobal.h>
+static void error(const char *fmt, ...)
+{
+	char buf[512];
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	MGlobal::displayError(MString(buf));
+}
+#else
+static void error(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+}
+#endif
+
 static bool initCL(cl_context *clContext, cl_command_queue *clQueue)
 {
     cl_int ciErrNum;
@@ -46,11 +67,11 @@ static bool initCL(cl_context *clContext, cl_command_queue *clQueue)
     cl_uint num_platforms;
     ciErrNum = clGetPlatformIDs(0, NULL, &num_platforms);
     if (ciErrNum != CL_SUCCESS) {
-        printf("Error %d in clGetPlatformIDs call.\n", ciErrNum);
+        error("Error %d in clGetPlatformIDs call.\n", ciErrNum);
         return false;
     }
     if (num_platforms == 0) {
-        printf("No OpenCL platform found.\n");
+        error("No OpenCL platform found.\n");
         return false;
     }
     cl_platform_id *clPlatformIDs;
@@ -94,13 +115,13 @@ static bool initCL(cl_context *clContext, cl_command_queue *clQueue)
     // XXX context creation should be moved to client code
     *clContext = clCreateContext(props, 1, &clDevice, NULL, NULL, &ciErrNum);
     if (ciErrNum != CL_SUCCESS) {
-        printf("Error %d in clCreateContext\n", ciErrNum);
+        error("Error %d in clCreateContext\n", ciErrNum);
         return false;
     }
 
     *clQueue = clCreateCommandQueue(*clContext, clDevice, 0, &ciErrNum);
     if (ciErrNum != CL_SUCCESS) {
-        printf("Error %d in clCreateCommandQueue\n", ciErrNum);
+        error("Error %d in clCreateCommandQueue\n", ciErrNum);
         return false;
     }
     return true;

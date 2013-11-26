@@ -851,8 +851,16 @@ public:
 		int numFloatsPerVertex = m_vertexBuffer->GetNumElements();
 		int size = m_numVertices * numFloatsPerVertex * sizeof(float);
 		float * vertexData = new float[size];
-		clEnqueueReadBuffer(g_clQueue, mem, true, 0, size, vertexData, 0, NULL, NULL);
-		MStatus status = convertOsdFarToMayaMeshData(m_farMesh, vertexData, numFloatsPerVertex, subdivisionLevel, inMeshFn, newMeshDataObj);
+		int err = clEnqueueReadBuffer(g_clQueue, mem, true, 0, size, vertexData, 0, NULL, NULL);
+		MStatus status;
+		if (err == CL_SUCCESS)
+		{
+			status = convertOsdFarToMayaMeshData(m_farMesh, vertexData, numFloatsPerVertex, subdivisionLevel, inMeshFn, newMeshDataObj);
+		}
+		else
+		{
+			status = MStatus::kFailure;
+		}
 		delete[] vertexData;
 		return status;
 	}
