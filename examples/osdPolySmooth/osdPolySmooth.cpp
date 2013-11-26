@@ -68,6 +68,10 @@
 #include <osd/cpuVertexBuffer.h>
 
 #ifdef OPENSUBDIV_HAS_OPENCL
+#define OPENSUBDIV_USE_OPENCL
+#endif
+
+#ifdef OPENSUBDIV_USE_OPENCL
     #include <osd/clVertexBuffer.h>
     #include <osd/clComputeContext.h>
     #include <osd/clComputeController.h>
@@ -821,7 +825,7 @@ private:
 	OpenSubdiv::OsdCpuVertexBuffer * m_varyingBuffer;
 };
 
-#ifdef OPENSUBDIV_HAS_OPENCL
+#ifdef OPENSUBDIV_USE_OPENCL
 
 class CLComputeEngine : public ComputeEngine
 {
@@ -1011,7 +1015,7 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
 
 				ComputeEngine *computeEngine = NULL;
 
-#ifdef OPENSUBDIV_HAS_OPENCL
+#ifdef OPENSUBDIV_USE_OPENCL
 				if (computeEngine == NULL)
 				{
 					computeEngine = new CLComputeEngine(farMesh, numVertexElements, numVaryingElements,
@@ -1028,6 +1032,7 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
 				{
 					computeEngine = new CpuComputeEngine(farMesh, numVertexElements, numVaryingElements,
 														 numVertices, numFarVerts);
+					computeEngine->Initialize();
 				}
 
                 // == UPDATE VERTICES (can be done after farMesh generated from topology) ==
@@ -1346,7 +1351,7 @@ MStatus uninitializePlugin( MObject obj)
     returnStatus = plugin.deregisterNode( OsdPolySmooth::id );
     MCHECKERR(returnStatus, "deregisterNode");
 
-#ifdef OPENSUBDIV_HAS_OPENCL
+#ifdef OPENSUBDIV_USE_OPENCL
 	if (g_clContext != NULL)
 	{
 		uninitCL(g_clContext, g_clQueue);
