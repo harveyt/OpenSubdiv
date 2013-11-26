@@ -72,6 +72,7 @@
     #include <osd/clComputeContext.h>
     #include <osd/clComputeController.h>
 
+	#define OPENSUBDIV_CLINIT_USE_MAYA_API
     #include "../common/clInit.h"
 
 	bool g_clInitialized = false;
@@ -799,6 +800,7 @@ public:
 		{
 			if (!initCL(&g_clContext, &g_clQueue))
 			{
+				MGlobal::displayError(MString("OpenSubDiv cannot initialize OpenCL sub-system"));
 				m_isInitialized = false;
 				return;
 			}
@@ -810,6 +812,7 @@ public:
 		m_vertexBuffer = OpenSubdiv::OsdCLVertexBuffer::Create(numVertexElements, numFarVerts, g_clContext);
 		if (m_vertexBuffer == NULL)
 		{
+			MGlobal::displayError(MString("OpenSubDiv cannot initialize OpenCL vertex buffer"));
 			delete(m_computeContext);
 			delete(m_computeController);
 			m_isInitialized = false;
@@ -862,6 +865,16 @@ private:
 };
 
 #endif
+
+enum ComputeEngineStyle
+{
+	ComputeEngine_NotSet,
+	ComputeEngine_CPU,
+#ifdef OPENSUBDIV_HAS_OPENCL
+	ComputeEngine_OpenCL,
+#endif
+};
+ComputeEngineStyle g_computeEngineStyle = ComputeEngine_NotSet;
 
 // ====================================
 // Compute
@@ -965,26 +978,39 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
 
                 int numFarVerts = farMesh->GetNumVertices();
 
-				ComputeEngine *computeEngine = NULL;
+				ComputeEngine *computeEngine;
+
+				switch (g_computeEngineStyle)
+				{
+				case ComputeEngine_NotSet:
+					goto try_ComputeEngine_OpenCL;
 
 #ifdef OPENSUBDIV_HAS_OPENCL
-				if (computeEngine == NULL)
-				{
+				try_ComputeEngine_OpenCL:
+				case ComputeEngine_OpenCL:
 					computeEngine = new CLComputeEngine(farMesh, numVertexElements, numVaryingElements,
 														numVertices, numFarVerts);
 					if (!computeEngine->IsInitialized())
 					{
-						MGlobal::displayError(MString("Cannot initialize OpenCL compute engine for OpenSubDiv, using CPU engine"));
 						delete computeEngine;
 						computeEngine = NULL;
+						goto try_ComputeEngine_CPU;
 					}
-				}
+
+					if (g_computeEngineStyle == ComputeEngine_NotSet)
+						MGlobal::displayInfo(MString("OpenSubDiv using OpenCL compute engine"));
+					g_computeEngineStyle = ComputeEngine_OpenCL;
+					break;
 #endif
 
-				if (computeEngine == NULL)
-				{
+				try_ComputeEngine_CPU:
+				case ComputeEngine_CPU:
 					computeEngine = new CpuComputeEngine(farMesh, numVertexElements, numVaryingElements,
-													 numVertices, numFarVerts);
+						numVertices, numFarVerts);
+					if (g_computeEngineStyle == ComputeEngine_NotSet)
+						MGlobal::displayInfo(MString("OpenSubDiv using CPU compute engine"));
+					g_computeEngineStyle = ComputeEngine_CPU;
+					break;
 				}
 
                 // == UPDATE VERTICES (can be done after farMesh generated from topology) ==
