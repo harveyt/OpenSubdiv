@@ -98,6 +98,7 @@ MObject OsdPolySmooth::a_fvarBoundaryMethod;
 MObject OsdPolySmooth::a_fvarPropagateCorners;
 MObject OsdPolySmooth::a_smoothTriangles;
 MObject OsdPolySmooth::a_creaseMethod;
+MObject OsdPolySmooth::a_forceCPU;
 // MAYA_NODE_BUILDER:END [ATTRIBUTE INITIALIZATION] ==========
 
 // ATTR ENUMS
@@ -713,12 +714,21 @@ createSmoothMesh_objectGroups(const MFnMeshData &inMeshDat,
 class ComputeEngine
 {
 public:
-	ComputeEngine(FMesh const *farMesh, int numVertexElements, int numVaryingElements, int numVertices, int numFarVerts)
+	enum InitState
+	{
+		InitState_FirstTime,
+		InitState_Ok,
+		InitState_Error,
+	};
+
+	ComputeEngine(FMesh const *farMesh, int numVertexElements, int numVaryingElements, int numVertices, int numFarVerts,
+				  InitState &initState)
 		: m_farMesh(farMesh)
 		, m_numVertexElements(numVertexElements)
 		, m_numVaryingElements(numVaryingElements)
 		, m_numVertices(numVertices)
 		, m_numFarVerts(numFarVerts)
+		, m_initState(initState)
 	{
 	}
 
@@ -728,7 +738,7 @@ public:
 
 	bool Initialize()
 	{
-		switch (ms_initState)
+		switch (m_initState)
 		{
 		case InitState_Error:
 			return false;
@@ -736,12 +746,12 @@ public:
 		default:
 		case InitState_FirstTime:
 		case InitState_Ok:
-			if (!DoInitialize(ms_initState == InitState_FirstTime))
+			if (!DoInitialize(m_initState == InitState_FirstTime))
 			{
-				ms_initState = InitState_Error;
+				m_initState = InitState_Error;
 				return false;
 			}
-			ms_initState = InitState_Ok;
+			m_initState = InitState_Ok;
 			break;
 		}
 
@@ -754,14 +764,7 @@ public:
 	virtual MStatus ConvertToMayaMeshData(int subdivisionLevel, MFnMesh const & inMeshFn, MObject newMeshDataObj) = 0;
 
 protected:
-	enum InitState
-	{
-		InitState_FirstTime,
-		InitState_Ok,
-		InitState_Error,
-	};
-
-	static InitState ms_initState;
+	InitState &m_initState;
 	FMesh const * m_farMesh;
 	int m_numVertexElements;
 	int m_numVaryingElements;
@@ -769,13 +772,11 @@ protected:
 	int m_numFarVerts;
 };
 
-ComputeEngine::InitState ComputeEngine::ms_initState = InitState_FirstTime;
-
 class CpuComputeEngine : public ComputeEngine
 {
 public:
 	CpuComputeEngine(FMesh const *farMesh, int numVertexElements, int numVaryingElements, int numVertices, int numFarVerts)
-		: ComputeEngine(farMesh, numVertexElements, numVaryingElements, numVertices, numFarVerts)
+		: ComputeEngine(farMesh, numVertexElements, numVaryingElements, numVertices, numFarVerts, ms_initState)
 	{
 	}
 
@@ -823,12 +824,14 @@ public:
 
 private:
 	static OpenSubdiv::OsdCpuComputeController * ms_computeController;
+	static InitState ms_initState;
 	OpenSubdiv::OsdCpuComputeController::ComputeContext * m_computeContext;
 	OpenSubdiv::OsdCpuVertexBuffer * m_vertexBuffer;
 	OpenSubdiv::OsdCpuVertexBuffer * m_varyingBuffer;
 };
 
 OpenSubdiv::OsdCpuComputeController * CpuComputeEngine::ms_computeController = NULL;
+ComputeEngine::InitState CpuComputeEngine::ms_initState = InitState_FirstTime;
 
 #ifdef OPENSUBDIV_USE_OPENCL
 
@@ -836,7 +839,7 @@ class CLComputeEngine : public ComputeEngine
 {
 public:
 	CLComputeEngine(FMesh const *farMesh, int numVertexElements, int numVaryingElements, int numVertices, int numFarVerts)
-		: ComputeEngine(farMesh, numVertexElements, numVaryingElements, numVertices, numFarVerts)
+		: ComputeEngine(farMesh, numVertexElements, numVaryingElements, numVertices, numFarVerts, ms_initState)
 	{
 	}
 
@@ -912,12 +915,14 @@ public:
 
 private:
 	static OpenSubdiv::OsdCLComputeController * ms_computeController;
+	static InitState ms_initState;
 	OpenSubdiv::OsdCLComputeController::ComputeContext * m_computeContext;
 	OpenSubdiv::OsdCLVertexBuffer * m_vertexBuffer;
 	OpenSubdiv::OsdCLVertexBuffer * m_varyingBuffer;
 };
 
 OpenSubdiv::OsdCLComputeController * CLComputeEngine::ms_computeController = NULL;
+ComputeEngine::InitState CLComputeEngine::ms_initState = InitState_FirstTime;
 
 #endif
 
@@ -957,6 +962,7 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
             bool  fvarPropCorners    = data.inputValue(a_fvarPropagateCorners).asBool();
             bool  smoothTriangles    = data.inputValue(a_smoothTriangles).asBool();
             short creaseMethodVal    = data.inputValue(a_creaseMethod).asShort();
+            bool  forceCPU           = data.inputValue(a_forceCPU).asBool();
 
             // Convert attr values to OSD enums
             HMesh::InterpolateBoundaryMethod vertInterpBoundaryMethod =
@@ -1026,7 +1032,7 @@ MStatus OsdPolySmooth::compute( const MPlug& plug, MDataBlock& data ) {
 				ComputeEngine *computeEngine = NULL;
 
 #ifdef OPENSUBDIV_USE_OPENCL
-				if (computeEngine == NULL)
+				if (!forceCPU && computeEngine == NULL)
 				{
 					computeEngine = new CLComputeEngine(farMesh, numVertexElements, numVaryingElements,
 														numVertices, numFarVerts);
@@ -1293,6 +1299,18 @@ MStatus OsdPolySmooth::initialize() {
     stat = addAttribute( a_creaseMethod );
     MCHECKERR( stat, "cannot OsdPolySmooth::addAttribute(a_creaseMethod)" );
 
+    // a_forceCPU : Force CPU usage.
+    a_forceCPU = nAttr.create("forceCPU", "fcpu", MFnNumericData::kBoolean, 0.0, &stat);
+    MCHECKERR( stat, "cannot create OsdPolySmooth::forceCPU" );
+    stat = nAttr.setDefault(false);
+    MCHECKERR( stat, "cannot OsdPolySmooth::forceCPU.setDefault(false)" );
+    stat = nAttr.setReadable(true);
+    MCHECKERR( stat, "cannot OsdPolySmooth::forceCPU.setReadable()" );
+    stat = nAttr.setWritable(true);
+    MCHECKERR( stat, "cannot OsdPolySmooth::forceCPU.setWritable()" );
+    stat = addAttribute( a_forceCPU );
+    MCHECKERR( stat, "cannot OsdPolySmooth::addAttribute(a_forceCPU)" );
+
     // MAYA_NODE_BUILDER:END [ATTRIBUTE CREATION] ==========
 
 
@@ -1315,6 +1333,8 @@ MStatus OsdPolySmooth::initialize() {
     MCHECKERR( stat, "cannot have attribute vertBoundaryMethod affect output" );
     stat = attributeAffects( a_fvarBoundaryMethod, a_output );
     MCHECKERR( stat, "cannot have attribute fvarBoundaryMethod affect output" );
+    stat = attributeAffects( a_forceCPU, a_output );
+    MCHECKERR( stat, "cannot have attribute forceCPU affect output" );
     // MAYA_NODE_BUILDER:END [ATTRIBUTE DEPENDS] ==========
 
     return MS::kSuccess;

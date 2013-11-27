@@ -54,6 +54,7 @@ public:
     static MObject a_fvarPropagateCorners; //
     static MObject a_smoothTriangles;      // Apply a special subdivision rule be applied to all triangular faces that was empirically determined to make triangles subdivide more smoothly.
     static MObject a_creaseMethod;         // Controls how boundary edges and vertices are interpolated. <ul> <li>Normal</li> <li>Chaikin: Improves the appearance of multiedge creases with varying weight</li> </ul>
+    static MObject a_forceCPU;      // Force CPU usage.
     // MAYA_NODE_BUILDER:END [ATTRIBUTE DECLARATION] ==========
 
     static const MTypeId id;
