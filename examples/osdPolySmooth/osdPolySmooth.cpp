@@ -784,12 +784,15 @@ public:
 		delete(m_vertexBuffer);
 		delete(m_varyingBuffer);
 		delete(m_computeContext);
-		delete(m_computeController);
+		// delete(m_computeController);
 	}
 
 	virtual bool DoInitialize(bool firstTime)
 	{
-		m_computeController = new OpenSubdiv::OsdCpuComputeController();
+		if (ms_computeController == NULL)
+		{
+			ms_computeController = new OpenSubdiv::OsdCpuComputeController();
+		}
 		m_computeContext = OpenSubdiv::OsdCpuComputeController::ComputeContext::Create(m_farMesh);
 		m_vertexBuffer = OpenSubdiv::OsdCpuVertexBuffer::Create(m_numVertexElements, m_numFarVerts);
 		m_varyingBuffer = (m_numVaryingElements) ? OpenSubdiv::OsdCpuVertexBuffer::Create(m_numVaryingElements, m_numFarVerts) : NULL;
@@ -807,8 +810,8 @@ public:
 
 	virtual void Subdivide()
 	{
-		m_computeController->Refine(m_computeContext, m_farMesh->GetKernelBatches(), m_vertexBuffer, m_varyingBuffer);
-		m_computeController->Synchronize();
+		ms_computeController->Refine(m_computeContext, m_farMesh->GetKernelBatches(), m_vertexBuffer, m_varyingBuffer);
+		ms_computeController->Synchronize();
 	}
 
 	virtual MStatus ConvertToMayaMeshData(int subdivisionLevel, MFnMesh const & inMeshFn, MObject newMeshDataObj)
@@ -819,11 +822,13 @@ public:
 	}
 
 private:
-	OpenSubdiv::OsdCpuComputeController * m_computeController;
+	static OpenSubdiv::OsdCpuComputeController * ms_computeController;
 	OpenSubdiv::OsdCpuComputeController::ComputeContext * m_computeContext;
 	OpenSubdiv::OsdCpuVertexBuffer * m_vertexBuffer;
 	OpenSubdiv::OsdCpuVertexBuffer * m_varyingBuffer;
 };
+
+OpenSubdiv::OsdCpuComputeController * CpuComputeEngine::ms_computeController = NULL;
 
 #ifdef OPENSUBDIV_USE_OPENCL
 
@@ -840,7 +845,7 @@ public:
 		delete(m_vertexBuffer);
 		delete(m_varyingBuffer);
 		delete(m_computeContext);
-		delete(m_computeController);
+		// delete(ms_computeController);
 	}
 
 	virtual bool DoInitialize(bool firstTime)
@@ -854,7 +859,10 @@ public:
 			}
 		}
 
-		m_computeController = new OpenSubdiv::OsdCLComputeController(g_clContext, g_clQueue);
+		if (ms_computeController == NULL)
+		{
+			ms_computeController = new OpenSubdiv::OsdCLComputeController(g_clContext, g_clQueue);
+		}
 		m_computeContext = OpenSubdiv::OsdCLComputeController::ComputeContext::Create(m_farMesh, g_clContext);
 		m_vertexBuffer = OpenSubdiv::OsdCLVertexBuffer::Create(m_numVertexElements, m_numFarVerts, g_clContext);
 		if (m_vertexBuffer == NULL)
@@ -878,8 +886,8 @@ public:
 
 	virtual void Subdivide()
 	{
-		m_computeController->Refine(m_computeContext, m_farMesh->GetKernelBatches(), m_vertexBuffer, m_varyingBuffer);
-		m_computeController->Synchronize();
+		ms_computeController->Refine(m_computeContext, m_farMesh->GetKernelBatches(), m_vertexBuffer, m_varyingBuffer);
+		ms_computeController->Synchronize();
 	}
 
 	virtual MStatus ConvertToMayaMeshData(int subdivisionLevel, MFnMesh const & inMeshFn, MObject newMeshDataObj)
@@ -903,11 +911,13 @@ public:
 	}
 
 private:
-	OpenSubdiv::OsdCLComputeController * m_computeController;
+	static OpenSubdiv::OsdCLComputeController * ms_computeController;
 	OpenSubdiv::OsdCLComputeController::ComputeContext * m_computeContext;
 	OpenSubdiv::OsdCLVertexBuffer * m_vertexBuffer;
 	OpenSubdiv::OsdCLVertexBuffer * m_varyingBuffer;
 };
+
+OpenSubdiv::OsdCLComputeController * CLComputeEngine::ms_computeController = NULL;
 
 #endif
 
