@@ -886,7 +886,7 @@ public:
 	{
 		cl_mem mem = m_vertexBuffer->BindCLBuffer(g_clQueue);
 		int numFloatsPerVertex = m_vertexBuffer->GetNumElements();
-		int size = m_numVertices * numFloatsPerVertex * sizeof(float);
+		int size = m_numFarVerts * numFloatsPerVertex * sizeof(float);
 		float * vertexData = new float[size];
 		int err = clEnqueueReadBuffer(g_clQueue, mem, true, 0, size, vertexData, 0, NULL, NULL);
 		MStatus status;
