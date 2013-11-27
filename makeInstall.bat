@@ -6,7 +6,8 @@ if not defined TNT_ROOT (
    goto :eof
 )
 
-devenv OpenSubdiv.sln /Project INSTALL /ProjectConfig "Release|x64" /Build "Release|x64"
+devenv OpenSubdiv.sln /Project INSTALL /Build "Release|x64"
+rem devenv OpenSubdiv.sln /Project INSTALL /Build "Debug|x64"
 
 set BUILD_PATH="c:\Program Files\OpenSubDiv\plugin"
 set PLUGIN_PATH=%TNT_ROOT%\Tools\MayaPlugins\2014-x64
