@@ -39,28 +39,37 @@ OsdGLDrawConfig::~OsdGLDrawConfig()
 
 #if defined(GL_ARB_tessellation_shader) || defined(GL_VERSION_4_0)
 static const char *commonShaderSource =
-#include "glslPatchCommon.inc"
+#include "glslPatchCommon.gen.h"
+;
+static const char *ptexShaderSource =
+#include "glslPtexCommon.gen.h"
 ;
 static const char *bsplineShaderSource =
-#include "glslPatchBSpline.inc"
+#include "glslPatchBSpline.gen.h"
 ;
 static const char *gregoryShaderSource =
-#include "glslPatchGregory.inc"
+#include "glslPatchGregory.gen.h"
 ;
 static const char *transitionShaderSource =
-#include "glslPatchTransition.inc"
+#include "glslPatchTransition.gen.h"
 ;
 #endif
 
 OsdGLDrawRegistryBase::~OsdGLDrawRegistryBase() {}
 
 OsdGLDrawSourceConfig *
-OsdGLDrawRegistryBase::_CreateDrawSourceConfig(OsdDrawContext::PatchDescriptor const & desc)
+OsdGLDrawRegistryBase::_CreateDrawSourceConfig(
+    OsdDrawContext::PatchDescriptor const & desc)
 {
     OsdGLDrawSourceConfig * sconfig = _NewDrawSourceConfig();
 
 #if defined(GL_ARB_tessellation_shader) || defined(GL_VERSION_4_0)
     sconfig->commonShader.source = commonShaderSource;
+    
+    if (IsPtexEnabled()) {
+        sconfig->commonShader.source += ptexShaderSource;
+    }
+    
     {
         std::ostringstream ss;
         ss << (int)desc.GetMaxValence();
@@ -293,10 +302,6 @@ OsdGLDrawRegistryBase::_CreateDrawConfig(
     }
 
     config->program = program;
-    config->primitiveIdBaseUniform =
-      glGetUniformLocation(program, "OsdPrimitiveIdBase");
-    config->gregoryQuadOffsetBaseUniform =
-      glGetUniformLocation(program, "OsdGregoryQuadOffsetBase");
 
     return config;
 }

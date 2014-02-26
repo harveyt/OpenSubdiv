@@ -66,9 +66,9 @@ OpenSubdiv::OsdGLMeshInterface *g_mesh = NULL;
 
 static const char *shaderSource =
 #if defined(GL_ARB_tessellation_shader) || defined(GL_VERSION_4_0)
-    #include "shader.inc"
+    #include "shader.gen.h"
 #else
-    #include "shader_gl3.inc"
+    #include "shader_gl3.gen.h"
 #endif
 ;
 
@@ -721,7 +721,6 @@ EffectDrawRegistry::_CreateDrawSourceConfig(DescType const & desc)
     sconfig->fragmentShader.AddDefine("FRAGMENT_SHADER");
 
     sconfig->commonShader.AddDefine("OSD_FVAR_WIDTH", "2");
-    sconfig->commonShader.AddDefine("OSD_USER_TRANSFORM_UNIFORMS", "mat4 UvViewMatrix;");
 
 
     if (desc.first.GetType() == OpenSubdiv::FarPatchTables::QUADS) {
@@ -980,9 +979,9 @@ display()
         GLuint program = bindProgram(GetEffect(), patch);
 
         GLuint uniformGregoryQuadOffsetBase =
-          glGetUniformLocation(program, "OsdGregoryQuadOffsetBase");
+          glGetUniformLocation(program, "GregoryQuadOffsetBase");
         GLuint uniformPrimitiveIdBase =
-          glGetUniformLocation(program, "OsdPrimitiveIdBase");
+          glGetUniformLocation(program, "PrimitiveIdBase");
 
         glProgramUniform1i(program, uniformGregoryQuadOffsetBase,
                            patch.GetQuadOffsetIndex());
@@ -991,7 +990,7 @@ display()
 #else
         GLuint program = bindProgram(GetEffect(), patch);
         GLint uniformPrimitiveIdBase =
-          glGetUniformLocation(program, "OsdPrimitiveIdBase");
+          glGetUniformLocation(program, "PrimitiveIdBase");
         if (uniformPrimitiveIdBase != -1)
             glUniform1i(uniformPrimitiveIdBase, patch.GetPatchIndex());
 #endif
@@ -1045,9 +1044,9 @@ display()
         GLuint program = bindProgram(GetEffect(/*uvDraw=*/ true), patch);
 
         GLuint uniformGregoryQuadOffsetBase =
-          glGetUniformLocation(program, "OsdGregoryQuadOffsetBase");
+          glGetUniformLocation(program, "GregoryQuadOffsetBase");
         GLuint uniformPrimitiveIdBase =
-          glGetUniformLocation(program, "OsdPrimitiveIdBase");
+          glGetUniformLocation(program, "PrimitiveIdBase");
 
         glProgramUniform1i(program, uniformGregoryQuadOffsetBase,
                            patch.GetQuadOffsetIndex());
@@ -1056,7 +1055,7 @@ display()
 #else
         GLuint program = bindProgram(GetEffect(/*uvDraw=*/ true), patch);
         GLint uniformPrimitiveIdBase =
-          glGetUniformLocation(program, "OsdPrimitiveIdBase");
+          glGetUniformLocation(program, "PrimitiveIdBase");
         if (uniformPrimitiveIdBase != -1)
             glUniform1i(uniformPrimitiveIdBase, patch.GetPatchIndex());
 #endif

@@ -79,7 +79,7 @@ OpenSubdiv::OsdD3D11MeshInterface *g_mesh;
 #include "../common/d3d11_hud.h"
 
 static const char *shaderSource =
-#include "shader.inc"
+#include "shader.gen.h"
 ;
 
 #include <algorithm>
@@ -618,11 +618,20 @@ EffectDrawRegistry::_CreateDrawSourceConfig(
         sconfig->vertexShader.source = shaderSource;
         sconfig->vertexShader.target = "vs_5_0";
         sconfig->vertexShader.entry = "vs_main";
-    } else {
+    } else if (desc.first.GetType() == OpenSubdiv::FarPatchTables::TRIANGLES) {
         if (effect == kQuadWire) effect = kTriWire;
         if (effect == kQuadFill) effect = kTriFill;
         if (effect == kQuadLine) effect = kTriLine;
         smoothNormals = true;
+    } else {
+        // adaptive
+        if (effect == kQuadWire) effect = kTriWire;
+        if (effect == kQuadFill) effect = kTriFill;
+        if (effect == kQuadLine) effect = kTriLine;
+        smoothNormals = true;
+        sconfig->vertexShader.source = shaderSource + sconfig->vertexShader.source;
+        sconfig->hullShader.source = shaderSource + sconfig->hullShader.source;
+        sconfig->domainShader.source = shaderSource + sconfig->domainShader.source;
     }
     assert(sconfig);
 

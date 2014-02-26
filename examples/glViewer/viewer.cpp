@@ -122,9 +122,9 @@ OpenSubdiv::OsdGLMeshInterface *g_mesh;
 
 static const char *shaderSource =
 #if defined(GL_ARB_tessellation_shader) || defined(GL_VERSION_4_0)
-    #include "shader.inc"
+    #include "shader.gen.h"
 #else
-    #include "shader_gl3.inc"
+    #include "shader_gl3.gen.h"
 #endif
 ;
 
@@ -215,8 +215,7 @@ Stopwatch g_fpsTimer;
 
 // geometry
 std::vector<float> g_orgPositions,
-                   g_positions,
-                   g_normals;
+                   g_positions;
 
 Scheme             g_scheme;
 
@@ -499,6 +498,7 @@ initializeShapes( ) {
 }
 
 //------------------------------------------------------------------------------
+#ifdef calcNormals
 static void
 calcNormals(OsdHbrMesh * mesh, std::vector<float> const & pos, std::vector<float> & result ) {
 
@@ -527,6 +527,7 @@ calcNormals(OsdHbrMesh * mesh, std::vector<float> const & pos, std::vector<float
     for (int i = 0; i < nverts; ++i)
         normalize( &result[i*3] );
 }
+#endif
 
 //------------------------------------------------------------------------------
 static void
@@ -620,9 +621,7 @@ createOsdMesh( const std::string &shape, int level, int kernel, Scheme scheme=kC
     OsdHbrMesh * hmesh = simpleHbr<OpenSubdiv::OsdVertex>(shape.c_str(), scheme, g_orgPositions,
                                                           g_displayStyle == kFaceVaryingColor);
 
-    g_normals.resize(g_orgPositions.size(),0.0f);
     g_positions.resize(g_orgPositions.size(),0.0f);
-    calcNormals( hmesh, g_orgPositions, g_normals );
 
     // save coarse topology (used for coarse mesh drawing)
     g_coarseEdges.clear();
@@ -1312,9 +1311,9 @@ display() {
         }
 
         GLuint uniformGregoryQuadOffsetBase =
-          glGetUniformLocation(program, "OsdGregoryQuadOffsetBase");
+          glGetUniformLocation(program, "GregoryQuadOffsetBase");
         GLuint uniformPrimitiveIdBase =
-          glGetUniformLocation(program, "OsdPrimitiveIdBase");
+          glGetUniformLocation(program, "PrimitiveIdBase");
 
         glProgramUniform1i(program, uniformGregoryQuadOffsetBase,
                            patch.GetQuadOffsetIndex());
@@ -1323,7 +1322,7 @@ display() {
 #else
         GLuint program = bindProgram(GetEffect(), patch);
         GLint uniformPrimitiveIdBase =
-          glGetUniformLocation(program, "OsdPrimitiveIdBase");
+          glGetUniformLocation(program, "PrimitiveIdBase");
         if (uniformPrimitiveIdBase != -1)
             glUniform1i(uniformPrimitiveIdBase, patch.GetPatchIndex());
 #endif
