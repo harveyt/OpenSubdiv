@@ -2,7 +2,7 @@
 # ignore build files
 /build*
 /inst*
-
+*.inc
 *.pyc
 osdshim_wrap.cpp
 shim.py
