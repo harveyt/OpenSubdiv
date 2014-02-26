@@ -39,6 +39,7 @@
 #include <cstdio>
 
 #ifdef OPENSUBDIV_CLINIT_USE_MAYA_API
+#include <stdarg.h>
 #include <maya/MGlobal.h>
 static void error(const char *fmt, ...)
 {
