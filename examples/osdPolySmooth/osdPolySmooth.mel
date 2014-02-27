@@ -93,11 +93,11 @@ global proc string[] osdPolySmooth(string $meshes[]) {
     int $showBaseMesh = 1;
 
     // Store off the original selection so can restore it below
-    string $origSel[] = `ls -sl`;
+    string $origSel[] = `ls -l -sl`;
 
     // If no meshes specified on the commandline, then act on all selected meshes
     if (`size $meshes` == 0) {
-        $meshes = `ls -sl -dag -type mesh`;
+        $meshes = `ls -l -sl -dag -type mesh`;
     }
 
     // Loop over each specified mesh and add osdPolySmooth mesh operator
@@ -110,8 +110,10 @@ global proc string[] osdPolySmooth(string $meshes[]) {
         // Insert base mesh node
         string $baseMeshShape;
         if ($showBaseMesh) {
-            string $meshT[] = `listRelatives -parent $mesh`;
-            $baseMeshShape = `createNode mesh -parent $meshT[0] -name ($mesh+"_base")`;
+            string $meshT[] = `listRelatives -f -parent $mesh`;
+	    string $meshNameTokens[]; clear $meshNameTokens;
+	    int $numNameTokens = `tokenize  $mesh "|" $meshNameTokens`;
+            $baseMeshShape = `createNode mesh -parent $meshT[0] -name ($meshNameTokens[$numNameTokens -1]+"_base")`;
             setAttr ($baseMeshShape+".overrideEnabled") 1;
             setAttr ($baseMeshShape+".overrideShading") 0;
             connectAttr ($inMeshAttr[0]) ($baseMeshShape+".inMesh");
