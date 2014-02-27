@@ -3,6 +3,7 @@
 /build*
 /inst*
 *.inc
+*.gen.h
 *.pyc
 osdshim_wrap.cpp
 shim.py
