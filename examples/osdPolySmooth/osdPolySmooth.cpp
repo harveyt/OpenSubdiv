@@ -1330,11 +1330,8 @@ MStatus OsdPolySmooth::initialize() {
     MCHECKERR( stat, "cannot have attribute vertBoundaryMethod affect output" );
     stat = attributeAffects( a_fvarBoundaryMethod, a_output );
     MCHECKERR( stat, "cannot have attribute fvarBoundaryMethod affect output" );
-<<<<<<< HEAD
     stat = attributeAffects( a_forceCPU, a_output );
     MCHECKERR( stat, "cannot have attribute forceCPU affect output" );
-=======
-
     stat = attributeAffects( a_creaseMethod, a_recommendedIsolation );
     MCHECKERR( stat, "cannot have attribute creaseMethod affect .si output" );
     stat = attributeAffects( a_inputPolymesh, a_recommendedIsolation );
@@ -1349,7 +1346,6 @@ MStatus OsdPolySmooth::initialize() {
     MCHECKERR( stat, "cannot have attribute vertBoundaryMethod affect .si output" );
     stat = attributeAffects( a_fvarBoundaryMethod, a_recommendedIsolation );
     MCHECKERR( stat, "cannot have attribute fvarBoundaryMethod affect .si output" );
->>>>>>> v2_3_4
     // MAYA_NODE_BUILDER:END [ATTRIBUTE DEPENDS] ==========
 
     return MS::kSuccess;
